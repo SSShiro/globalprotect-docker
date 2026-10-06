@@ -1,0 +1,70 @@
+FROM ubuntu:22.04 AS builder
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get update
+
+RUN apt-get install -y \
+      build-essential \
+      cmake \
+      qtbase5-dev \
+      libqt5websockets5-dev \
+      qtwebengine5-dev \
+      qttools5-dev \
+      qt5keychain-dev
+
+COPY . /gpagent
+RUN cd /gpagent && \
+    mkdir build && \
+    cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/gpagent/install .. && \
+    make -j$(nproc) && \
+    make install
+
+# The base image provides the LXDE desktop with x11vnc and noVNC (port 80),
+# Russian locale and a supervisord setup (/etc/supervisor/vnc.conf generated
+# by its entrypoint from /etc/supervisor/vnc.conf.template).
+FROM ssshiro/docker-ubuntu-lxde:22.04-vnc_ru
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get update && \
+    apt-get -y --no-install-recommends install \
+      libqt5core5a \
+      libqt5websockets5 \
+      libqt5webenginewidgets5 \
+      libqt5keychain1 \
+      openconnect \
+      ca-certificates \
+      iproute2 \
+      dante-server \
+      perl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /gpagent/install/ /usr
+
+# Allow plain username/password storage in the configuration folder,
+# because all keyrings require D-Bus, which we don't have in container.
+ENV GPAGENT_ALLOW_PLAIN_PASSWORD=1
+# gpagent has to run as root (openconnect), Chromium refuses to start
+# without a sandbox in this case.
+ENV QTWEBENGINE_DISABLE_SANDBOX=1
+
+COPY ./docker/supervisor-log-prefix.sh /
+COPY ./docker/danted.conf.in /etc/
+COPY ./docker/danted.sh /
+COPY ./docker/gpagent-lxde.sh /
+
+# Add gpagent and danted to the supervisord config template of the base image.
+# The entrypoint of the base image processes it with envsubst on startup.
+COPY ./docker/supervisord-lxde.conf /tmp/supervisord-lxde.conf
+RUN chmod +x /supervisor-log-prefix.sh /danted.sh /gpagent-lxde.sh && \
+    cat /tmp/supervisord-lxde.conf >> /etc/supervisor/vnc.conf.template && \
+    rm /tmp/supervisord-lxde.conf
+
+WORKDIR /root
+
+# noVNC (the desktop with gpagent) and SOCKS5 proxy
+EXPOSE 80
+EXPOSE 1080
+# ENTRYPOINT of the base image starts supervisord

@@ -29,6 +29,19 @@ When the connection is established, configure your applications to use the provi
 
 <img src="screenshots/screenshot3.png">
 
+## Docker (LXDE desktop variant)
+
+The `docker/Dockerfile.lxde` variant is built on top of [ssshiro/docker-ubuntu-lxde:22.04-vnc_ru](https://github.com/SSShiro/docker-ubuntu-lxde) (LXDE desktop, x11vnc, noVNC, Russian locale). `gpagent` runs as a regular window/tray application on the desktop.
+
+```
+git clone --recurse-submodules https://github.com/SSShiro/globalprotect-docker.git
+cd globalprotect-docker
+docker build -t globalprotect-docker:lxde -f docker/Dockerfile.lxde .
+docker-compose -f docker-compose.lxde.yml up -d
+```
+
+The desktop is available at `http://localhost:8083/vnc.html` (password from `PASSWD`, `vncpasswd` by default); the SOCKS5 proxy is on `localhost:8080`. The container must run as root.
+
 ## Manual Installation
 
 Prerequisites:
